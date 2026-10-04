@@ -6,4 +6,4 @@ bleach
 requests
 Pillow
 gunicorn
-libsql-experimental
+libsql
