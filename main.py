@@ -1,5 +1,8 @@
 import os
-import sqlite3
+try:
+    import libsql_experimental as sqlite3
+except ImportError:
+    import sqlite3
 import secrets
 import base64
 import re
@@ -23,13 +26,17 @@ MAX_PAGE_SIZE_BYTES = 20 * 1024  # 20 KB
 
 
 # ==========================================
-# BANCO DE DADOS & INICIALIZAÇÃO
+# BANCO DE DADOS & INICIALIZAÇÃO (TURSO / SQLITE)
 # ==========================================
-DATABASE = 'pupe.db'
+TURSO_DATABASE_URL = os.environ.get('TURSO_DATABASE_URL', 'pupe.db')
+TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN', '')
 
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
+        if TURSO_DATABASE_URL.startswith(('libsql://', 'https://')):
+            g.db = sqlite3.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+        else:
+            g.db = sqlite3.connect(TURSO_DATABASE_URL)
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -40,7 +47,7 @@ def close_db(error):
         db.close()
 
 def init_db():
-    """Cria e atualiza o esquema do banco de dados SQLite."""
+    """Cria e atualiza o esquema do banco de dados SQLite / Turso."""
     with app.app_context():
         db = get_db()
         cursor = db.cursor()
@@ -175,16 +182,14 @@ def init_db():
         ''')
         try:
             cursor.execute("ALTER TABLE groups ADD COLUMN theme_color TEXT DEFAULT '#6366f1'")
-        except sqlite3.OperationalError:
-            print("ERRO EMAIL THING")
+        except Exception:
             pass
 
         # Adiciona colunas de verificação de e-mail
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT DEFAULT NULL")
             cursor.execute("ALTER TABLE users ADD COLUMN code_expires TEXT DEFAULT NULL")
-        except sqlite3.OperationalError:
-            print("ERRO EMAIL THING")
+        except Exception:
             pass
 
         db.commit()
@@ -740,7 +745,7 @@ def seguir_usuario(user_id):
             db.execute("INSERT INTO follows (follower_id, followed_id) VALUES (?, ?)", (session['user_id'], user_id))
             db.commit()
             create_notification(user_id, session['user_id'], 'follow', message="começou a seguir-te.")
-        except sqlite3.IntegrityError:
+        except Exception:
             pass
     return redirect(request.referrer or url_for('index'))
 
@@ -904,7 +909,7 @@ def entrar_grupo(group_id):
         db.execute("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)", (group_id, session['user_id']))
         db.commit()
         flash('Entrou no grupo!', 'success')
-    except sqlite3.IntegrityError:
+    except Exception:
         pass
     return redirect(url_for('detalhes_grupo', group_id=group_id))
 
@@ -943,5 +948,3 @@ init_db()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-#cadastrar
