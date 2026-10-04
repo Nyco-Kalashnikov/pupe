@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 2rem auto;">
+    <h2>Recuperar Senha</h2>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">Digite seu e-mail cadastrado para receber as instruções de recuperação.</p>
+    <br>
+    <form method="POST">
+        <div class="form-group">
+            <label>E-mail</label>
+            <input type="email" name="email" required placeholder="seuemail@exemplo.com">
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%;">Enviar E-mail</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .create-post-card textarea { width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem; resize: vertical; font-size: 0.95rem; }
+    .form-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; }
+
+    .post-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .post-author-info { display: flex; flex-direction: column; }
+    .author-name { text-decoration: none; color: var(--text-color); font-size: 0.95rem; }
+    .author-handle { color: var(--text-muted); font-size: 0.85rem; }
+    .post-date { color: var(--text-muted); font-size: 0.8rem; }
+
+    .post-actions-owner { margin-left: auto; display: flex; gap: 0.75rem; }
+
+    .post-content { margin-bottom: 1rem; font-size: 0.95rem; word-break: break-word; }
+    .post-image { width: 100%; max-height: 400px; object-fit: cover; border-radius: 6px; margin-top: 0.5rem; }
+
+    .reactions-bar { display: flex; gap: 0.5rem; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); padding: 0.5rem 0; margin-bottom: 0.75rem; }
+    .reaction-btn { background: none; border: 1px solid transparent; padding: 0.25rem 0.5rem; border-radius: 12px; cursor: pointer; font-size: 0.85rem; color: var(--text-muted); }
+    .reaction-btn:hover { background: var(--bg-color); }
+    .reaction-btn.active { background: #e8f0fe; border-color: var(--primary); color: var(--primary); font-weight: bold; }
+
+    .comments-section { background: #fafafa; border-radius: 6px; padding: 0.75rem; margin-top: 0.5rem; }
+    .comment-item { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; font-size: 0.88rem; }
+    .comment-body { background: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; flex-grow: 1; }
+    .comment-header { display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.2rem; }
+    .comment-owner-actions { margin-top: 0.25rem; font-size: 0.75rem; }
+
+    .comment-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .comment-form input { flex-grow: 1; border: 1px solid var(--border-color); border-radius: 4px; padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+
+    .btn-xs { padding: 0.2rem 0.4rem; font-size: 0.75rem; }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+    .btn-link-xs { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.75rem; }
+</style>
+
+<div class="feed-layout">
+    {% if current_user %}
+    <div class="card create-post-card">
+        <form action="{{ url_for('criar_post') }}" method="POST" enctype="multipart/form-data">
+            <textarea name="content" placeholder="O que você está pensando?" rows="3"></textarea>
+            <div class="form-footer">
+                <input type="file" name="image" accept="image/*" id="post-img-input" style="display:none;">
+                <label for="post-img-input" class="btn-secondary btn-sm">📷 Anexar Foto</label>
+                <button type="submit" class="btn-primary">Publicar</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="posts-list">
+        {% for post in posts %}
+        <div class="card post-card" id="post-{{ post.id }}">
+            <div class="post-header">
+                <img src="{{ post.avatar_url or '/static/default-avatar.png' }}" class="avatar-sm" alt="Avatar">
+                <div class="post-author-info">
+                    <a href="{{ url_for('perfil_usuario', username=post.username) }}" class="author-name">
+                        <strong>{{ post.display_name or post.username }}</strong>
+                    </a>
+                    <span class="author-handle">@{{ post.username }} • <span class="post-date">{{ post.created_at }}</span></span>
+                    {% if post.updated_at %}
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">(editado)</span>
+                    {% endif %}
+                </div>
+
+                {% if current_user and current_user.id == post.user_id %}
+                <div class="post-actions-owner">
+                    <button onclick="toggleEditPost('{{ post.id }}')" class="btn-link">Editar</button>
+                    <form action="{{ url_for('deletar_post', post_id=post.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja apagar este post?');" style="display:inline;">
+                        <button type="submit" class="btn-link btn-danger">Apagar</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="post-content" id="post-content-{{ post.id }}">
+                <p>{{ post.content }}</p>
+                {% if post.image_url %}
+                    <img src="{{ post.image_url }}" class="post-image" alt="Imagem do post">
+                {% endif %}
+            </div>
+
+            {% if current_user and current_user.id == post.user_id %}
+            <div class="post-edit-form" id="post-edit-{{ post.id }}" style="display:none; margin-bottom: 1rem;">
+                <form action="{{ url_for('editar_post', post_id=post.id) }}" method="POST">
+                    <textarea name="content" rows="3" style="width:100%; padding:0.5rem;">{{ post.content }}</textarea>
+                    <div style="margin-top: 0.5rem; display:flex; gap: 0.5rem;">
+                        <button type="submit" class="btn-primary btn-sm">Salvar Alterações</button>
+                        <button type="button" onclick="toggleEditPost('{{ post.id }}')" class="btn-secondary btn-sm">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+
+            <div class="reactions-bar">
+                {% set emojis = ['🤍', '👍', '⭐', '🔥', '😂'] %}
+                {% for emoji in emojis %}
+                <form action="{{ url_for('reagir', post_id=post.id) }}" method="POST" style="display:inline;">
+                    <input type="hidden" name="reaction_type" value="{{ emoji }}">
+                    <button type="submit" class="reaction-btn {% if post.user_reaction == emoji %}active{% endif %}">
+                        {{ emoji }} {{ post.reactions.get(emoji, 0) }}
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+
+            <div class="comments-section">
+                <div class="comments-list">
+                    {% for comment in post.comments %}
+                    <div class="comment-item" id="comment-{{ comment.id }}">
+                        <img src="{{ comment.avatar_url or '/static/default-avatar.png' }}" class="avatar-xs" alt="Avatar">
+                        <div class="comment-body">
+                            <div class="comment-header">
+                                <strong>{{ comment.display_name or comment.username }}</strong>
+                                <span class="author-handle">@{{ comment.username }}</span>
+                                <span class="post-date">• {{ comment.created_at }}</span>
+                            </div>
+
+                            <p id="comment-text-{{ comment.id }}">{{ comment.content }}</p>
+
+                            {% if current_user and current_user.id == comment.user_id %}
+                            <div id="comment-edit-{{ comment.id }}" style="display:none; margin-top: 0.25rem;">
+                                <form action="{{ url_for('editar_comentario', comment_id=comment.id) }}" method="POST" style="display:flex; gap:0.25rem;">
+                                    <input type="text" name="content" value="{{ comment.content }}" required style="flex-grow:1; padding:0.2rem;">
+                                    <button type="submit" class="btn-primary btn-xs">Salvar</button>
+                                    <button type="button" onclick="toggleEditComment('{{ comment.id }}')" class="btn-secondary btn-xs">Cancelar</button>
+                                </form>
+                            </div>
+
+                            <div class="comment-owner-actions">
+                                <button onclick="toggleEditComment('{{ comment.id }}')" class="btn-link-xs">Editar</button>
+                                <form action="{{ url_for('deletar_comentario', comment_id=comment.id) }}" method="POST" onsubmit="return confirm('Apagar este comentário?');" style="display:inline;">
+                                    <button type="submit" class="btn-link-xs btn-danger">Apagar</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if current_user %}
+                <form action="{{ url_for('comentar', post_id=post.id) }}" method="POST" class="comment-form">
+                    <input type="text" name="content" placeholder="Escreva um comentário..." required>
+                    <button type="submit" class="btn-primary btn-sm">Enviar</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <p style="text-align: center; color: var(--text-muted); padding: 2rem 0;">Nenhuma publicação encontrada.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function toggleEditPost(id) {
+    const content = document.getElementById(`post-content-${id}`);
+    const editForm = document.getElementById(`post-edit-${id}`);
+    if (editForm.style.display === 'none') {
+        editForm.style.display = 'block';
+        content.style.display = 'none';
+    } else {
+        editForm.style.display = 'none';
+        content.style.display = 'block';
+    }
+}
+
+function toggleEditComment(id) {
+    const text = document.getElementById(`comment-text-${id}`);
+    const editForm = document.getElementById(`comment-edit-${id}`);
+    if (editForm.style.display === 'none') {
+        editForm.style.display = 'block';
+        text.style.display = 'none';
+    } else {
+        editForm.style.display = 'none';
+        text.style.display = 'block';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; gap: 1.5rem; align-items: center;">
+        <img src="{{ profile_user.avatar_url or '/static/default-avatar.png' }}" class="avatar-lg" alt="Avatar">
+        <div style="flex-grow: 1;">
+            <h2>{{ profile_user.display_name or profile_user.username }}</h2>
+            <p style="color: var(--text-muted);">@{{ profile_user.username }}</p>
+            <p style="margin-top: 0.5rem;">{{ profile_user.bio or 'Sem bio informada.' }}</p>
+            <div style="margin-top: 0.75rem; display: flex; gap: 1rem; font-size: 0.9rem;">
+                <span><strong>{{ followers_count }}</strong> seguidores</span>
+                <span><strong>{{ following_count }}</strong> seguindo</span>
+            </div>
+        </div>
+        {% if current_user and current_user.id != profile_user.id %}
+            <div>
+                {% if is_following %}
+                    <form action="{{ url_for('deixar_de_seguir', user_id=profile_user.id) }}" method="POST">
+                        <button type="submit" class="btn-secondary">Deixar de Seguir</button>
+                    </form>
+                {% else %}
+                    <form action="{{ url_for('seguir_usuario', user_id=profile_user.id) }}" method="POST">
+                        <button type="submit" class="btn-primary">Seguir</button>
+                    </form>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<h3>Posts de @{{ profile_user.username }}</h3>
+<br>
+{% for post in posts %}
+<div class="card">
+    <p>{{ post.content }}</p>
+    {% if post.image_url %}
+        <img src="{{ post.image_url }}" style="width: 100%; max-height: 350px; object-fit: cover; border-radius: 6px; margin-top: 0.5rem;" alt="Imagem do post">
+    {% endif %}
+    <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; display: block;">{{ post.created_at }}</span>
+</div>
+{% else %}
+<p style="color: var(--text-muted);">Nenhum post publicado por este usuário ainda.</p>
+{% endfor %}
+{% endblock %}
