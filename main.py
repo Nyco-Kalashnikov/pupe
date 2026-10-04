@@ -19,18 +19,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 # Configuração do Rate Limiting
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
 
-# Handler customizado para limite excedido
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    flash("Muitas tentativas repetidas. Por favor, aguarde um minuto antes de tentar novamente.", "error")
-    return redirect(request.referrer or url_for('index'))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'pupe-dark-secret-key-2026')
@@ -373,6 +362,18 @@ def inject_user_context():
 
     return dict(current_user=None, unread_notifications=0)
 
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Handler customizado para limite excedido
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    flash("Muitas tentativas repetidas. Por favor, aguarde um minuto antes de tentar novamente.", "error")
+    return redirect(request.referrer or url_for('index'))
 
 # ==========================================
 # ROTAS DE AUTENTICAÇÃO E PERFIL
