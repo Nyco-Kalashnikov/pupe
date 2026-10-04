@@ -173,6 +173,19 @@ def init_db():
                 FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE CASCADE
             )
         ''')
+        try:
+            cursor.execute("ALTER TABLE groups ADD COLUMN theme_color TEXT DEFAULT '#6366f1'")
+        except sqlite3.OperationalError:
+            print("ERRO EMAIL THING")
+            pass
+
+        # Adiciona colunas de verificação de e-mail
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT DEFAULT NULL")
+            cursor.execute("ALTER TABLE users ADD COLUMN code_expires TEXT DEFAULT NULL")
+        except sqlite3.OperationalError:
+            print("ERRO EMAIL THING")
+            pass
 
         db.commit()
 
@@ -274,18 +287,112 @@ def cadastro():
             flash('Nome de utilizador ou e-mail já registado.', 'error')
             return render_template('cadastro.html')
 
+        # Gera código numérico de 6 dígitos e validade de 15 minutos
+        code = f"{secrets.randbelow(1000000):06d}"
+        expires = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
         pwd_hash = generate_password_hash(password)
+
         cursor = db.execute(
-            "INSERT INTO users (username, display_name, email, password_hash) VALUES (?, ?, ?, ?)",
-            (username, display_name, email, pwd_hash)
+            """INSERT INTO users (username, display_name, email, password_hash, is_verified, verification_code, code_expires)
+               VALUES (?, ?, ?, ?, 0, ?, ?)""",
+            (username, display_name, email, pwd_hash, code, expires)
         )
         db.commit()
 
-        session['user_id'] = cursor.lastrowid
-        flash('Conta criada com sucesso! Bem-vindo ao Pupe.', 'success')
-        return redirect(url_for('index'))
+        user_id = cursor.lastrowid
+        session['pending_user_id'] = user_id
+
+        # Envia e-mail com o código via Resend
+        body = f"""
+        <div style="font-family: sans-serif; background: #0d0e12; color: #e6e8eb; padding: 20px; border-radius: 8px;">
+            <h2>Código de Verificação - Pupe</h2>
+            <p>O seu código de verificação é:</p>
+            <h1 style="color: #6366f1; letter-spacing: 4px;">{code}</h1>
+            <p>Este código expira em 15 minutos.</p>
+        </div>
+        """
+        send_email_resend(email, "Código de Verificação - Pupe", body)
+
+        flash('Código de verificação enviado para o seu e-mail!', 'info')
+        return redirect(url_for('verificar_email'))
 
     return render_template('cadastro.html')
+
+
+@app.route('/verificar-email', methods=['GET', 'POST'])
+def verificar_email():
+    user_id = session.get('pending_user_id') or session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    if not user:
+        return redirect(url_for('login'))
+
+    if user['is_verified'] == 1:
+        session.pop('pending_user_id', None)
+        session['user_id'] = user['id']
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        input_code = request.form.get('code', '').strip()
+
+        if not user['verification_code'] or input_code != user['verification_code']:
+            flash('Código incorreto. Verifique e tente novamente.', 'error')
+            return render_template('verificar_email.html', email=user['email'])
+
+        if datetime.utcnow() > datetime.fromisoformat(user['code_expires']):
+            flash('Este código expirou. Solicite um novo código.', 'error')
+            return render_template('verificar_email.html', email=user['email'])
+
+        # Confirma verificação
+        db.execute(
+            "UPDATE users SET is_verified = 1, verification_code = NULL, code_expires = NULL WHERE id = ?",
+            (user['id'],)
+        )
+        db.commit()
+
+        session.pop('pending_user_id', None)
+        session['user_id'] = user['id']
+
+        flash('E-mail verificado com sucesso! Bem-vindo ao Pupe.', 'success')
+        return redirect(url_for('index'))
+
+    return render_template('verificar_email.html', email=user['email'])
+
+
+@app.route('/reenviar-codigo', methods=['POST'])
+def reenviar_codigo():
+    user_id = session.get('pending_user_id') or session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    if user and user['is_verified'] == 0:
+        new_code = f"{secrets.randbelow(1000000):06d}"
+        expires = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+
+        db.execute(
+            "UPDATE users SET verification_code = ?, code_expires = ? WHERE id = ?",
+            (new_code, expires, user['id'])
+        )
+        db.commit()
+
+        body = f"""
+        <div style="font-family: sans-serif; background: #0d0e12; color: #e6e8eb; padding: 20px; border-radius: 8px;">
+            <h2>Novo Código de Verificação - Pupe</h2>
+            <h1 style="color: #6366f1; letter-spacing: 4px;">{new_code}</h1>
+            <p>Válido por 15 minutos.</p>
+        </div>
+        """
+        send_email_resend(user['email'], "Novo Código de Verificação - Pupe", body)
+        flash('Novo código enviado para o seu e-mail!', 'info')
+
+    return redirect(url_for('verificar_email'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -827,3 +934,5 @@ init_db()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+#cadastrar
