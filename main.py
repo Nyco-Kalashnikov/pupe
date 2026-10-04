@@ -1,8 +1,10 @@
 import os
+import sqlite3
 try:
-    import libsql as sqlite3
+    import libsql
+    USING_LIBSQL = True
 except ImportError:
-    import sqlite3
+    USING_LIBSQL = False
 import secrets
 import base64
 import re
@@ -33,13 +35,20 @@ TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN', '')
 
 def get_db():
     if 'db' not in g:
-        if TURSO_DATABASE_URL.startswith(('libsql://', 'https://')):
-            g.db = sqlite3.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+        is_remote = TURSO_DATABASE_URL.startswith(('libsql://', 'https://'))
+        
+        if is_remote:
+            if not USING_LIBSQL:
+                raise ImportError("O pacote 'libsql' não está instalado no ambiente.")
+            # Conexão remota com o Turso
+            g.db = libsql.connect(TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
         else:
+            # Conexão local com SQLite padrão
             g.db = sqlite3.connect(TURSO_DATABASE_URL)
-        g.db.row_factory = sqlite3.Row
+            g.db.row_factory = sqlite3.Row  # Aplicado apenas na conexão nativa do sqlite3
+            
     return g.db
-
+    
 @app.teardown_appcontext
 def close_db(error):
     db = g.pop('db', None)
