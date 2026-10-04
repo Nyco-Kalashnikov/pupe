@@ -194,20 +194,28 @@ def init_db():
 # SANITIZAÇÃO PUPE PAGES & DECORADORES
 # ==========================================
 def sanitize_html(html_str):
-    """Sanitiza HTML removendo JavaScript, scripts, e tags perigosas para Pupe Pages."""
+    """Sanitiza HTML bloqueando completamente scripts, eventos inline e links externos."""
     if not html_str:
         return ""
-    # Remove tags <script>
+
+    # 1. Remove todas as tags <script> e seu conteúdo interno
     clean = re.sub(r'<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>', '', html_str, flags=re.IGNORECASE)
-    # Remove tags perigosas
-    clean = re.sub(r'<(iframe|object|embed|form|base|meta)\b[^>]*>', '', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'</(iframe|object|embed|form|base|meta)>', '', clean, flags=re.IGNORECASE)
-    # Remove manipuladores de evento inline (onclick, onload, onerror, etc.)
+
+    # 2. Converte tags de link <a> em <span> para desativar qualquer hiperlink
+    clean = re.sub(r'<a\b[^>]*>', '<span>', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'</a>', '</span>', clean, flags=re.IGNORECASE)
+
+    # 3. Remove elementos perigosos ou de carregamento externo perigoso
+    clean = re.sub(r'<(iframe|object|embed|form|base|meta|link|applet)\b[^>]*>', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'</(iframe|object|embed|form|base|meta|link|applet)>', '', clean, flags=re.IGNORECASE)
+
+    # 4. Bloqueia todos os atributos de evento JavaScript inline (onclick, onload, onerror, etc.)
     clean = re.sub(r'\son\w+\s*=\s*["\'][^"\']*["\']', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\son\w+\s*=\s*[^"\s>]+', '', clean, flags=re.IGNORECASE)
-    # Remove links javascript:
-    clean = re.sub(r'href\s*=\s*["\']\s*javascript:[^"\']*["\']', 'href="#"', clean, flags=re.IGNORECASE)
-    clean = re.sub(r'src\s*=\s*["\']\s*javascript:[^"\']*["\']', 'src="#"', clean, flags=re.IGNORECASE)
+
+    # 5. Remove qualquer tentativa de uso do protocolo javascript:
+    clean = re.sub(r'(src|href|style)\s*=\s*["\']?\s*javascript:[^"\'>\s]*["\']?', '', clean, flags=re.IGNORECASE)
+
     return clean
 
 def login_required(f):
@@ -794,38 +802,39 @@ def ver_pupe_page(username):
     db = get_db()
     user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if not user:
-        flash('Utilizador não encontrado.', 'error')
-        return redirect(url_for('index'))
+        return "Utilizador não encontrado", 404
 
     page = db.execute("SELECT * FROM pupe_pages WHERE user_id = ? AND is_active = 1", (user['id'],)).fetchone()
     if not page:
-        flash('Este utilizador ainda não criou uma Pupe Page.', 'info')
-        return redirect(url_for('perfil_usuario', username=username))
+        return "Página não encontrada", 404
 
-    # Renderiza com sandbox básico e estilo escuro padrão de isolamento
-    wrapper = f"""
-    <!DOCTYPE html>
-    <html lang="pt">
-    <head>
-        <meta charset="UTF-8">
-        <title>Pupe Page - @{username}</title>
-        <style>
-            body {{ margin: 0; padding: 20px; background: #0b0c10; color: #e6e8eb; font-family: sans-serif; }}
-            .pupe-page-bar {{ background: #16181e; padding: 10px 20px; border-bottom: 1px solid #272a34; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }}
-            .pupe-page-bar a {{ color: #6366f1; text-decoration: none; font-weight: bold; }}
-        </style>
-    </head>
-    <body>
-        <div class="pupe-page-bar">
-            <span>Pupe Page de <strong>@{username}</strong></span>
-            <a href="/@{username}">← Voltar ao Perfil</a>
-        </div>
-        <div class="pupe-page-container">
-            {page['html_content']}
-        </div>
-    </body>
-    </html>
-    """
+    # Documento HTML isolado para o iframe
+    wrapper = f"""<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{
+            margin: 0;
+            padding: 1.25rem;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 0.92rem;
+            line-height: 1.6;
+            word-break: break-word;
+        }}
+        img {{
+            max-width: 100%;
+            border-radius: 6px;
+        }}
+    </style>
+</head>
+<body>
+    {page['html_content']}
+</body>
+</html>"""
     return render_template_string(wrapper)
 
 
