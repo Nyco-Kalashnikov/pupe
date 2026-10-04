@@ -1,6 +1,6 @@
 import os
 try:
-    import libsql_experimental as sqlite3
+    import libsql as sqlite3
 except ImportError:
     import sqlite3
 import secrets
