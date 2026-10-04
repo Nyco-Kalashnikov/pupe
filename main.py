@@ -15,6 +15,22 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 import requests
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Configuração do Rate Limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Handler customizado para limite excedido
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    flash("Muitas tentativas repetidas. Por favor, aguarde um minuto antes de tentar novamente.", "error")
+    return redirect(request.referrer or url_for('index'))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'pupe-dark-secret-key-2026')
@@ -362,6 +378,7 @@ def inject_user_context():
 # ROTAS DE AUTENTICAÇÃO E PERFIL
 # ==========================================
 @app.route('/cadastro', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def cadastro():
     if request.method == 'POST':
         username = request.form.get('username', '').strip().lower()
@@ -413,6 +430,7 @@ def cadastro():
 
 
 @app.route('/verificar-email', methods=['GET', 'POST'])
+@limiter.limit("1 per minute")
 def verificar_email():
     user_id = session.get('pending_user_id') or session.get('user_id')
     if not user_id:
@@ -456,6 +474,7 @@ def verificar_email():
 
 
 @app.route('/reenviar-codigo', methods=['POST'])
+@limiter.limit("5 per minute")
 def reenviar_codigo():
     user_id = session.get('pending_user_id') or session.get('user_id')
     if not user_id:
@@ -488,6 +507,7 @@ def reenviar_codigo():
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     if request.method == 'POST':
         login_input = request.form.get('login', '').strip().lower()
@@ -566,6 +586,7 @@ def configuracoes():
 
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def esqueci_senha():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -668,6 +689,7 @@ def index():
 
 
 @app.route('/post/criar', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def criar_post():
     content = request.form.get('content', '').strip()
@@ -824,6 +846,7 @@ def perfil_usuario(username):
 
 
 @app.route('/user/<int:user_id>/follow', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def seguir_usuario(user_id):
     if user_id != session['user_id']:
@@ -838,6 +861,7 @@ def seguir_usuario(user_id):
 
 
 @app.route('/user/<int:user_id>/unfollow', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def deixar_de_seguir(user_id):
     db = get_db()
@@ -936,6 +960,7 @@ def lista_grupos():
 
 
 @app.route('/grupo/criar', methods=['POST'])
+@limiter.limit("1 per minute")
 @login_required
 def criar_grupo():
     name = request.form.get('name', '').strip()
@@ -985,6 +1010,7 @@ def detalhes_grupo(group_id):
 
 
 @app.route('/grupo/<int:group_id>/entrar', methods=['POST'])
+@limiter.limit("1 per minute")
 @login_required
 def entrar_grupo(group_id):
     db = get_db()
@@ -998,6 +1024,7 @@ def entrar_grupo(group_id):
 
 
 @app.route('/grupo/<int:group_id>/sair', methods=['POST'])
+@limiter.limit("1 per minute")
 @login_required
 def sair_grupo(group_id):
     db = get_db()
