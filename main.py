@@ -289,20 +289,38 @@ def image_to_base64(file):
     return f"data:{mime_type};base64,{encoded}"
 
 
+# Permite definir o remetente via variável de ambiente (padrão de testes do Resend)
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+
 def send_email_resend(to_email, subject, html_content):
     if not RESEND_API_KEY:
-        print(f"[DEV MAIL LOG] Para: {to_email} | Assunto: {subject}")
+        print(f"[DEV MAIL LOG] Para: {to_email} | Assunto: {subject} | Conteúdo: {html_content}")
         return True
     try:
         res = requests.post(
             'https://api.resend.com/emails',
-            headers={'Authorization': f'Bearer {RESEND_API_KEY}', 'Content-Type': 'application/json'},
-            json={'from': f'Pupe <{SENDER_EMAIL}>', 'to': [to_email], 'subject': subject, 'html': html_content},
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'from': f'Pupe <{SENDER_EMAIL}>',
+                'to': [to_email],
+                'subject': subject,
+                'html': html_content
+            },
             timeout=10
         )
-        return res.status_code in (200, 201)
+        
+        if res.status_code in (200, 201):
+            print(f"[RESEND SUCCESS] E-mail enviado para {to_email}")
+            return True
+        else:
+            print(f"[ERRO RESEND API {res.status_code}] {res.text}")
+            return False
+
     except Exception as e:
-        print(f"[ERRO RESEND] {e}")
+        print(f"[EXCEÇÃO RESEND] {e}")
         return False
 
 
