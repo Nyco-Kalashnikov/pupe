@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Grupos</h2>
+<h2><i data-lucide="users"></i> Grupos do Pupe</h2>
 <br>
 
 {% if current_user %}
@@ -17,19 +17,24 @@
             <label>Descrição</label>
             <textarea name="description" rows="2"></textarea>
         </div>
+        <div class="form-group">
+            <label>Cor do Tema</label>
+            <input type="color" name="theme_color" value="#6366f1" style="height:40px; cursor:pointer;">
+        </div>
         <button type="submit" class="btn-primary">Criar Grupo</button>
     </form>
 </div>
 {% endif %}
 
-<div class="groups-list">
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
     {% for group in groups %}
-    <div class="card">
+    <div class="card" style="border-top: 4px solid {{ group.theme_color or '#6366f1' }};">
         <h3>{{ group.name }}</h3>
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">{{ group.description or 'Sem descrição.' }}</p>
+        <p style="color:var(--text-muted); font-size:0.85rem; margin:0.5rem 0;">{{ group.description or 'Sem descrição.' }}</p>
+        <span style="font-size:0.75rem; color:var(--text-muted);">Criado por @{{ group.owner_name }}</span>
+        <br><br>
+        <a href="{{ url_for('detalhes_grupo', group_id=group.id) }}" class="btn-secondary" style="width:100%; justify-content:center;">Aceder ao Grupo</a>
     </div>
-    {% else %}
-    <p style="color: var(--text-muted);">Nenhum grupo cadastrado ainda.</p>
     {% endfor %}
 </div>
 {% endblock %}

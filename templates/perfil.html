@@ -1,45 +1,118 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    /* Estilo do Caixote GitHub README / Pupe Page */
+    .readme-card {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    .readme-header {
+        background: #161b22;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid #30363d;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.82rem;
+        color: #8b949e;
+        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    }
+    .readme-header a {
+        color: #8b949e;
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+    .readme-header a:hover {
+        color: var(--primary);
+    }
+    .readme-body {
+        padding: 1.25rem 1.5rem;
+        color: #c9d1d9;
+        font-size: 0.92rem;
+        line-height: 1.6;
+        word-break: break-word;
+    }
+    .readme-body img {
+        max-width: 100%;
+        border-radius: 6px;
+    }
+</style>
+
+<!-- Cabeçalho do Perfil -->
 <div class="card">
-    <div style="display: flex; gap: 1.5rem; align-items: center;">
+    <div style="display:flex; gap:1.5rem; align-items:center;">
         <img src="{{ profile_user.avatar_url or '/static/default-avatar.png' }}" class="avatar-lg" alt="Avatar">
-        <div style="flex-grow: 1;">
+        
+        <div style="flex-grow:1;">
             <h2>{{ profile_user.display_name or profile_user.username }}</h2>
-            <p style="color: var(--text-muted);">@{{ profile_user.username }}</p>
-            <p style="margin-top: 0.5rem;">{{ profile_user.bio or 'Sem bio informada.' }}</p>
-            <div style="margin-top: 0.75rem; display: flex; gap: 1rem; font-size: 0.9rem;">
-                <span><strong>{{ followers_count }}</strong> seguidores</span>
-                <span><strong>{{ following_count }}</strong> seguindo</span>
+            <p style="color:var(--text-muted); font-size:0.88rem;">@{{ profile_user.username }}</p>
+
+            <div style="margin-top:0.6rem; display:flex; gap:1.2rem; font-size:0.85rem; color: var(--text-muted);">
+                <span><strong style="color: var(--text);">{{ followers_count }}</strong> seguidores</span>
+                <span><strong style="color: var(--text);">{{ following_count }}</strong> a seguir</span>
             </div>
         </div>
-        {% if current_user and current_user.id != profile_user.id %}
-            <div>
+
+        <div>
+            {% if current_user and current_user.id != profile_user.id %}
                 {% if is_following %}
                     <form action="{{ url_for('deixar_de_seguir', user_id=profile_user.id) }}" method="POST">
-                        <button type="submit" class="btn-secondary">Deixar de Seguir</button>
+                        <button type="submit" class="btn-secondary">A Deixar de Seguir</button>
                     </form>
                 {% else %}
                     <form action="{{ url_for('seguir_usuario', user_id=profile_user.id) }}" method="POST">
                         <button type="submit" class="btn-primary">Seguir</button>
                     </form>
                 {% endif %}
-            </div>
-        {% endif %}
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<h3>Posts de @{{ profile_user.username }}</h3>
+<!-- Pupe Page Incorporada (Estilo GitHub README) -->
+{% if pupe_page %}
+<div class="readme-card">
+    <div class="readme-header">
+        <span style="display: flex; align-items: center; gap: 0.4rem;">
+            <i data-lucide="file-code" style="width:14px; height:14px;"></i>
+            {{ profile_user.username }} / <strong>README.md</strong>
+        </span>
+        {% if current_user and current_user.id == profile_user.id %}
+        <a href="{{ url_for('pupe_page_editor') }}" title="Editar Pupe Page">
+            <i data-lucide="pencil" style="width:14px; height:14px;"></i>
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="readme-body">
+        {# O filtro | safe permite renderizar o HTML customizado já sanitizado #}
+        {{ pupe_page.html_content | safe }}
+    </div>
+</div>
+{% else %}
+<!-- Biografia Padrão quando não houver Pupe Page -->
+<div class="card">
+    <p style="font-size: 0.9rem; color: var(--text-muted);">
+        {{ profile_user.bio or 'Sem biografia informada.' }}
+    </p>
+</div>
+{% endif %}
+
+<h3>Publicações</h3>
 <br>
 {% for post in posts %}
 <div class="card">
     <p>{{ post.content }}</p>
     {% if post.image_url %}
-        <img src="{{ post.image_url }}" style="width: 100%; max-height: 350px; object-fit: cover; border-radius: 6px; margin-top: 0.5rem;" alt="Imagem do post">
+        <img src="{{ post.image_url }}" style="width:100%; max-height:350px; object-fit:cover; border-radius:8px; margin-top:0.5rem;" alt="Foto">
     {% endif %}
-    <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; display: block;">{{ post.created_at }}</span>
+    <span style="font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem; display:block;">{{ post.created_at }}</span>
 </div>
 {% else %}
-<p style="color: var(--text-muted);">Nenhum post publicado por este usuário ainda.</p>
+<p style="color:var(--text-muted);">Sem publicações.</p>
 {% endfor %}
 {% endblock %}

@@ -1,75 +1,81 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Pupe{% endblock %}</title>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --bg-color: #f4f6f8;
-            --card-bg: #ffffff;
-            --text-color: #1c1e21;
-            --text-muted: #65676b;
-            --primary: #4a6cf5;
-            --primary-hover: #3b5bdb;
-            --danger: #e63946;
-            --border-color: #e4e6eb;
+            --bg: #0d0e12;
+            --card-bg: #16181e;
+            --card-hover: #1c1f28;
+            --border: #272a34;
+            --text: #e6e8eb;
+            --text-muted: #8b8f9e;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --danger: #ef4444;
+            --accent: #10b981;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-color); line-height: 1.5; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); line-height: 1.5; padding-bottom: 2rem; }
 
-        .navbar { background: var(--card-bg); border-bottom: 1px solid var(--border-color); padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-        .brand { font-size: 1.25rem; font-weight: bold; color: var(--primary); text-decoration: none; }
-        .nav-links { display: flex; gap: 1rem; align-items: center; }
-        .nav-links a { color: var(--text-color); text-decoration: none; font-size: 0.95rem; font-weight: 500; }
-        .nav-links a:hover { color: var(--primary); }
+        .navbar { background: rgba(22, 24, 30, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .brand { font-size: 1.25rem; font-weight: 700; color: var(--primary); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-links { display: flex; gap: 1.2rem; align-items: center; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; transition: 0.2s color; }
+        .nav-links a:hover, .nav-links a.active { color: var(--text); }
 
-        .badge { background: var(--danger); color: white; border-radius: 50%; padding: 0.1rem 0.4rem; font-size: 0.75rem; vertical-align: top; }
+        .badge { background: var(--danger); color: white; border-radius: 99px; padding: 0.15rem 0.45rem; font-size: 0.7rem; font-weight: bold; }
 
         .container { max-width: 680px; margin: 1.5rem auto; padding: 0 1rem; }
 
-        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
-        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.88rem; display: flex; align-items: center; gap: 0.5rem; }
+        .alert-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .alert-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .alert-info { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3); }
 
-        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem; }
+        .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
 
-        .btn-primary { background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; }
+        .btn-primary { background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; transition: 0.2s background; }
         .btn-primary:hover { background: var(--primary-hover); }
-        .btn-secondary { background: #e4e6eb; color: var(--text-color); border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; }
-        .btn-link { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.85rem; padding: 0; }
+        .btn-secondary { background: var(--border); color: var(--text); border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; }
+        .btn-link { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.85rem; padding: 0; display: inline-flex; align-items: center; gap: 0.2rem; }
         .btn-danger { color: var(--danger) !important; }
 
-        .avatar-lg { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; }
+        .avatar-lg { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary); }
         .avatar-sm { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-        .avatar-xs { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+        .avatar-xs { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
 
         .form-group { margin-bottom: 1rem; }
-        .form-group label { display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.9rem; }
-        .form-group input, .form-group textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.95rem; }
+        .form-group label { display: block; margin-bottom: 0.35rem; font-weight: 500; font-size: 0.85rem; color: var(--text-muted); }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.65rem; background: #111217; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; color: var(--text); outline: none; }
+        .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); }
     </style>
 </head>
 <body>
     <nav class="navbar">
-        <a href="{{ url_for('index') }}" class="brand">🐶 Pupe</a>
+        <a href="{{ url_for('index') }}" class="brand"><i data-lucide="shield"></i> Pupe</a>
         <div class="nav-links">
             {% if current_user %}
-                <a href="{{ url_for('index') }}">Feed</a>
+                <a href="{{ url_for('index') }}"><i data-lucide="rss"></i> Feed</a>
                 <a href="{{ url_for('notificacoes') }}">
-                    Notificações 
+                    <i data-lucide="bell"></i>
                     {% if unread_notifications > 0 %}
                         <span class="badge">{{ unread_notifications }}</span>
                     {% endif %}
                 </a>
-                <a href="{{ url_for('lista_grupos') }}">Grupos</a>
+                <a href="{{ url_for('lista_grupos') }}"><i data-lucide="users"></i> Grupos</a>
+                <a href="{{ url_for('pupe_page_editor') }}"><i data-lucide="layout"></i> Page Editor</a>
                 <a href="{{ url_for('perfil_usuario', username=current_user.username) }}">@{{ current_user.username }}</a>
-                <a href="{{ url_for('configuracoes') }}">⚙️ Configurações</a>
-                <a href="{{ url_for('logout') }}">Sair</a>
+                <a href="{{ url_for('configuracoes') }}"><i data-lucide="settings"></i></a>
+                <a href="{{ url_for('logout') }}"><i data-lucide="log-out"></i></a>
             {% else %}
-                <a href="{{ url_for('login') }}">Login</a>
-                <a href="{{ url_for('cadastro') }}">Cadastrar</a>
+                <a href="{{ url_for('login') }}">Entrar</a>
+                <a href="{{ url_for('cadastro') }}" class="btn-primary">Criar Conta</a>
             {% endif %}
         </div>
     </nav>
@@ -85,5 +91,9 @@
 
         {% block content %}{% endblock %}
     </main>
+
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>

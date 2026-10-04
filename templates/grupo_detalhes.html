@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="border-top: 6px solid {{ group.theme_color or '#6366f1' }};">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <h2>{{ group.name }}</h2>
+            <p style="color:var(--text-muted); font-size:0.9rem;">{{ group.description }}</p>
+            <span style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem; display:block;">
+                {{ members_count }} membros • Admin: @{{ group.owner_name }}
+            </span>
+        </div>
+        {% if current_user %}
+            {% if is_member %}
+            <form action="{{ url_for('sair_grupo', group_id=group.id) }}" method="POST">
+                <button type="submit" class="btn-secondary">Sair do Grupo</button>
+            </form>
+            {% else %}
+            <form action="{{ url_for('entrar_grupo', group_id=group.id) }}" method="POST">
+                <button type="submit" class="btn-primary">Aderir ao Grupo</button>
+            </form>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% if is_member %}
+<div class="card">
+    <form action="{{ url_for('criar_post') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="group_id" value="{{ group.id }}">
+        <div class="form-group">
+            <textarea name="content" placeholder="Publicar algo no grupo {{ group.name }}..."></textarea>
+        </div>
+        <button type="submit" class="btn-primary"><i data-lucide="send"></i> Enviar para o Grupo</button>
+    </form>
+</div>
+{% endif %}
+
+<h3>Publicações do Grupo</h3>
+<br>
+{% for post in posts %}
+<div class="card">
+    <strong>@{{ post.username }}</strong>
+    <p style="margin-top:0.5rem;">{{ post.content }}</p>
+    {% if post.image_url %}
+        <img src="{{ post.image_url }}" style="width:100%; max-height:300px; object-fit:cover; border-radius:8px; margin-top:0.5rem;" alt="Foto">
+    {% endif %}
+</div>
+{% else %}
+<p style="color:var(--text-muted);">Ainda não há publicações neste grupo.</p>
+{% endfor %}
+{% endblock %}
