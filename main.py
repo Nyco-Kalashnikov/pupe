@@ -1,13 +1,9 @@
 import os
 import sqlite3
-try:
-    import libsql
-    USING_LIBSQL = True
-except ImportError:
-    USING_LIBSQL = False
 import secrets
 import base64
 import re
+import traceback
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
@@ -15,6 +11,12 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 import requests
+
+try:
+    import libsql
+    USING_LIBSQL = True
+except ImportError:
+    USING_LIBSQL = False
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'pupe-dark-secret-key-2026')
@@ -55,179 +57,181 @@ def close_db(error):
     if db is not None:
         db.close()
 
+_db_initialized = False
+
+@app.before_request
+def ensure_db_initialized():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            init_db()
+            _db_initialized = True
+        except Exception as e:
+            app.logger.error(f"Erro ao inicializar BD: {e}")
+
 def init_db():
     """Cria e atualiza o esquema do banco de dados SQLite / Turso."""
-    with app.app_context():
-        db = get_db()
-        cursor = db.cursor()
+    db = get_db()
+    cursor = db.cursor()
 
-        # Usuários
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                display_name TEXT,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                bio TEXT DEFAULT '',
-                avatar_url TEXT DEFAULT '/static/default-avatar.png',
-                reset_token TEXT DEFAULT NULL,
-                reset_token_expires TEXT DEFAULT NULL,
-                is_verified INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    # Usuários
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            bio TEXT DEFAULT '',
+            avatar_url TEXT DEFAULT '/static/default-avatar.png',
+            reset_token TEXT DEFAULT NULL,
+            reset_token_expires TEXT DEFAULT NULL,
+            is_verified INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
 
-        # Posts
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS posts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                group_id INTEGER DEFAULT NULL,
-                content TEXT NOT NULL,
-                image_url TEXT DEFAULT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT NULL,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE
-            )
-        ''')
+    # Posts
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            group_id INTEGER DEFAULT NULL,
+            content TEXT NOT NULL,
+            image_url TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Comentários
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                post_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT NULL,
-                FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Comentários
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT NULL,
+            FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Reações (Suporta nomes de ícones como 'heart', 'like', 'star', 'fire', 'laugh')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS reactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                post_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                reaction_type TEXT DEFAULT 'heart',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(post_id, user_id, reaction_type),
-                FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Reações
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS reactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            reaction_type TEXT DEFAULT 'heart',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(post_id, user_id, reaction_type),
+            FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Seguidores
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS follows (
-                follower_id INTEGER NOT NULL,
-                followed_id INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (follower_id, followed_id),
-                FOREIGN KEY (follower_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (followed_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Seguidores
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS follows (
+            follower_id INTEGER NOT NULL,
+            followed_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (follower_id, followed_id),
+            FOREIGN KEY (follower_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (followed_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Grupos
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS groups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                avatar_url TEXT DEFAULT '/static/default-group.png',
-                theme_color TEXT DEFAULT '#6366f1',
-                owner_id INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Grupos
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            avatar_url TEXT DEFAULT '/static/default-group.png',
+            theme_color TEXT DEFAULT '#6366f1',
+            owner_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Membros de Grupos
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS group_members (
-                group_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                role TEXT DEFAULT 'member',
-                status TEXT DEFAULT 'approved',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (group_id, user_id),
-                FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Membros de Grupos
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'member',
+            status TEXT DEFAULT 'approved',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Pupe Pages (FASE 4)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS pupe_pages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE NOT NULL,
-                html_content TEXT NOT NULL,
-                is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
+    # Pupe Pages
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pupe_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE NOT NULL,
+            html_content TEXT NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Notificações
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                actor_id INTEGER NOT NULL,
-                type TEXT NOT NULL,
-                target_id INTEGER DEFAULT NULL,
-                message TEXT DEFAULT '',
-                is_read INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
-        try:
-            cursor.execute("ALTER TABLE groups ADD COLUMN theme_color TEXT DEFAULT '#6366f1'")
-        except Exception:
-            pass
+    # Notificações
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            actor_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            target_id INTEGER DEFAULT NULL,
+            message TEXT DEFAULT '',
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
 
-        # Adiciona colunas de verificação de e-mail
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT DEFAULT NULL")
-            cursor.execute("ALTER TABLE users ADD COLUMN code_expires TEXT DEFAULT NULL")
-        except Exception:
-            pass
+    try:
+        cursor.execute("ALTER TABLE groups ADD COLUMN theme_color TEXT DEFAULT '#6366f1'")
+    except Exception:
+        pass
 
-        db.commit()
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT DEFAULT NULL")
+        cursor.execute("ALTER TABLE users ADD COLUMN code_expires TEXT DEFAULT NULL")
+    except Exception:
+        pass
+
+    db.commit()
 
 
 # ==========================================
 # SANITIZAÇÃO PUPE PAGES & DECORADORES
 # ==========================================
 def sanitize_html(html_str):
-    """Sanitiza HTML bloqueando completamente scripts, eventos inline e links externos."""
+    """Sanitiza HTML bloqueando scripts, eventos inline e links externos."""
     if not html_str:
         return ""
 
-    # 1. Remove todas as tags <script> e seu conteúdo interno
     clean = re.sub(r'<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>', '', html_str, flags=re.IGNORECASE)
-
-    # 2. Converte tags de link <a> em <span> para desativar qualquer hiperlink
     clean = re.sub(r'<a\b[^>]*>', '<span>', clean, flags=re.IGNORECASE)
     clean = re.sub(r'</a>', '</span>', clean, flags=re.IGNORECASE)
-
-    # 3. Remove elementos perigosos ou de carregamento externo perigoso
     clean = re.sub(r'<(iframe|object|embed|form|base|meta|link|applet)\b[^>]*>', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'</(iframe|object|embed|form|base|meta|link|applet)>', '', clean, flags=re.IGNORECASE)
-
-    # 4. Bloqueia todos os atributos de evento JavaScript inline (onclick, onload, onerror, etc.)
     clean = re.sub(r'\son\w+\s*=\s*["\'][^"\']*["\']', '', clean, flags=re.IGNORECASE)
     clean = re.sub(r'\son\w+\s*=\s*[^"\s>]+', '', clean, flags=re.IGNORECASE)
-
-    # 5. Remove qualquer tentativa de uso do protocolo javascript:
     clean = re.sub(r'(src|href|style)\s*=\s*["\']?\s*javascript:[^"\'>\s]*["\']?', '', clean, flags=re.IGNORECASE)
 
     return clean
@@ -276,16 +280,34 @@ def create_notification(user_id, actor_id, notif_type, target_id=None, message="
     )
     db.commit()
 
+@app.errorhandler(500)
+def handle_500(e):
+    print("=== TRACEBACK ERRO 500 ===")
+    print(traceback.format_exc())
+    return "Erro interno no servidor. Verifique os logs do Render para mais detalhes.", 500
+
 @app.context_processor
 def inject_user_context():
     if 'user_id' in session:
-        db = get_db()
-        user = db.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],)).fetchone()
-        unread_count = db.execute(
-            "SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0",
-            (session['user_id'],)
-        ).fetchone()['count']
-        return dict(current_user=user, unread_notifications=unread_count)
+        try:
+            db = get_db()
+            user = db.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],)).fetchone()
+            
+            if not user:
+                session.pop('user_id', None)
+                return dict(current_user=None, unread_notifications=0)
+                
+            unread_row = db.execute(
+                "SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0",
+                (session['user_id'],)
+            ).fetchone()
+            
+            unread_count = unread_row['count'] if unread_row else 0
+            return dict(current_user=user, unread_notifications=unread_count)
+        except Exception as e:
+            app.logger.error(f"Erro no context_processor: {e}")
+            return dict(current_user=None, unread_notifications=0)
+            
     return dict(current_user=None, unread_notifications=0)
 
 
@@ -309,7 +331,6 @@ def cadastro():
             flash('Nome de utilizador ou e-mail já registado.', 'error')
             return render_template('cadastro.html')
 
-        # Gera código numérico de 6 dígitos e validade de 15 minutos
         code = f"{secrets.randbelow(1000000):06d}"
         expires = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
         pwd_hash = generate_password_hash(password)
@@ -324,7 +345,6 @@ def cadastro():
         user_id = cursor.lastrowid
         session['pending_user_id'] = user_id
 
-        # Envia e-mail com o código via Resend
         body = f"""
         <div style="font-family: sans-serif; background: #0d0e12; color: #e6e8eb; padding: 20px; border-radius: 8px;">
             <h2>Código de Verificação - Pupe</h2>
@@ -369,7 +389,6 @@ def verificar_email():
             flash('Este código expirou. Solicite um novo código.', 'error')
             return render_template('verificar_email.html', email=user['email'])
 
-        # Confirma verificação
         db.execute(
             "UPDATE users SET is_verified = 1, verification_code = NULL, code_expires = NULL WHERE id = ?",
             (user['id'],)
@@ -672,7 +691,7 @@ def reagir(post_id):
         db.execute("INSERT INTO reactions (post_id, user_id, reaction_type) VALUES (?, ?, ?)", (post_id, user_id, reaction_type))
         post = db.execute("SELECT user_id FROM posts WHERE id = ?", (post_id,)).fetchone()
         if post:
-            create_notification(post['user_id'], user_id, 'reaction', post_id, f"reagiu à sua publicação.")
+            create_notification(post['user_id'], user_id, 'reaction', post_id, "reagiu à sua publicação.")
 
     db.commit()
     return redirect(request.referrer or url_for('index'))
@@ -713,7 +732,6 @@ def deletar_comentario(comment_id):
 # ==========================================
 # PERFIL PÚBLICO & SEGUIDORES
 # ==========================================
-
 @app.route('/@<username>')
 @app.route('/user/<username>')
 def perfil_usuario(username):
@@ -732,7 +750,6 @@ def perfil_usuario(username):
     if 'user_id' in session:
         is_following = bool(db.execute("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?", (session['user_id'], user['id'])).fetchone())
 
-    # Procura a Pupe Page ativa do utilizador
     pupe_page = db.execute("SELECT * FROM pupe_pages WHERE user_id = ? AND is_active = 1", (user['id'],)).fetchone()
 
     return render_template(
@@ -769,7 +786,7 @@ def deixar_de_seguir(user_id):
 
 
 # ==========================================
-# PUPE PAGES (FEATURE 6 - FUNCIONAL)
+# PUPE PAGES
 # ==========================================
 @app.route('/pages/editor', methods=['GET', 'POST'])
 @login_required
@@ -777,19 +794,16 @@ def pupe_page_editor():
     db = get_db()
     user_id = session['user_id']
     
-    # Procura o utilizador para obter o username correto
     user = db.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     page = db.execute("SELECT * FROM pupe_pages WHERE user_id = ?", (user_id,)).fetchone()
 
     if request.method == 'POST':
         html_raw = request.form.get('html_content', '')
 
-        # Limite de 20 KB
         if len(html_raw.encode('utf-8')) > MAX_PAGE_SIZE_BYTES:
             flash('O tamanho máximo permitido para a sua Pupe Page é 20 KB.', 'error')
             return render_template('pupe_page_editor.html', page=page, html_content=html_raw)
 
-        # Sanitização contra XSS / Script Ingestion
         clean_html = sanitize_html(html_raw)
 
         if page:
@@ -805,7 +819,6 @@ def pupe_page_editor():
         db.commit()
         flash('Pupe Page guardada e publicada com sucesso!', 'success')
         
-        # Redirecionamento corrigido usando user['username']
         return redirect(url_for('ver_pupe_page', username=user['username']))
 
     return render_template('pupe_page_editor.html', page=page)
@@ -822,7 +835,6 @@ def ver_pupe_page(username):
     if not page:
         return "Página não encontrada", 404
 
-    # Documento HTML isolado para o iframe
     wrapper = f"""<!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -853,7 +865,7 @@ def ver_pupe_page(username):
 
 
 # ==========================================
-# GRUPOS (SISTEMA COM CORES E DETALHES)
+# GRUPOS
 # ==========================================
 @app.route('/grupos')
 def lista_grupos():
@@ -950,7 +962,6 @@ def notificacoes():
     db.commit()
 
     return render_template('notificacoes.html', notifications=notifs)
-
 
 
 if __name__ == '__main__':
